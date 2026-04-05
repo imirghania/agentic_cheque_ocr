@@ -4,6 +4,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from config.settings import settings
 from src.llm import get_llm_provider
 from src.ocr import get_ocr_provider
 from src.workflow import ChequeReaderGraph
@@ -14,12 +15,12 @@ def extract_cheque(
     user_prompt: str = "Extract all available fields from this cheque.",
     ocr_provider: str = "easyocr",
     llm_provider: str = "openai",
-    **provider_kwargs,
+    **overrides,
 ) -> dict:
     load_dotenv()
 
-    ocr = get_ocr_provider(ocr_provider, **provider_kwargs.get("ocr_kwargs", {}))
-    llm = get_llm_provider(llm_provider, **provider_kwargs.get("llm_kwargs", {}))
+    ocr = get_ocr_provider(ocr_provider, settings, **overrides)
+    llm = get_llm_provider(llm_provider, settings, **overrides)
 
     graph = ChequeReaderGraph(ocr_provider=ocr, llm_provider=llm)
 

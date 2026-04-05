@@ -7,15 +7,20 @@ from pathlib import Path
 
 from dotenv import load_dotenv  # type: ignore
 
-from src.ocr import get_ocr_provider
+from cli_client import call_server
+from config.settings import settings
+from logger import setup_logging, logger
 from src.llm import get_llm_provider
+from src.ocr import get_ocr_provider
 from src.workflow import ChequeReaderGraph
 
 
 def main() -> None:
     load_dotenv()
+    setup_logging()
 
     parser = argparse.ArgumentParser(description="Extract structured data from bank cheque images")
+    
     parser.add_argument("image", type=str, help="Path to the cheque image")
     parser.add_argument(
         "--prompt",
@@ -40,38 +45,48 @@ def main() -> None:
         action="store_true",
         help="Pretty-print the JSON output",
     )
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Use the running API server instead of loading models locally",
+    )
+    parser.add_argument(
+        "--output-format",
+        type=str,
+        choices=["json", "markdown"],
+        default="json",
+        help="Output format (default: json)",
+    )
 
     args = parser.parse_args()
 
     if not Path(args.image).exists():
+        logger.error("Image not found: %s", args.image)
         print(f"Error: Image not found: {args.image}", file=sys.stderr)
         sys.exit(1)
 
-    import os
+    if args.server:
+        logger.info("Using server mode: %s", settings.server_url)
+        result = call_server(
+            image_path=args.image,
+            prompt=args.prompt,
+            output_format=args.output_format,
+            server_url=settings.server_url,
+        )
+        if args.output_format == "markdown" and result.get("markdown"):
+            print(result["markdown"])
+        else:
+            indent = 2 if args.pretty else None
+            print(json.dumps(result, indent=indent, default=str))
+        return
 
-    ocr_provider_name = args.ocr_provider or os.getenv("OCR_PROVIDER", "easyocr")
-    llm_provider_name = args.llm_provider or os.getenv("LLM_PROVIDER", "openai")
+    ocr_provider_name = args.ocr_provider or settings.ocr_provider
+    llm_provider_name = args.llm_provider or settings.llm_provider
 
-    ocr_kwargs = {}
-    if ocr_provider_name == "easyocr":
-        ocr_kwargs["gpu"] = os.getenv("EASYOCR_GPU", "false").lower() == "true"
-    elif ocr_provider_name == "tesseract":
-        ocr_kwargs["lang"] = os.getenv("TESSERACT_LANG", "eng")
+    logger.info("Selected providers: OCR=%s, LLM=%s", ocr_provider_name, llm_provider_name)
 
-    llm_kwargs = {}
-    if llm_provider_name == "openai":
-        llm_kwargs["model"] = os.getenv("OPENAI_MODEL", "gpt-4o")
-        if os.getenv("OPENAI_API_KEY"):
-            llm_kwargs["api_key"] = os.getenv("OPENAI_API_KEY")
-    elif llm_provider_name == "ollama":
-        llm_kwargs["model"] = os.getenv("OLLAMA_MODEL", "llama3.1")
-        llm_kwargs["base_url"] = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    elif llm_provider_name == "vllm":
-        llm_kwargs["model"] = os.getenv("VLLM_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
-        llm_kwargs["base_url"] = os.getenv("VLLM_BASE_URL", "http://localhost:8000/v1")
-
-    ocr = get_ocr_provider(ocr_provider_name, **ocr_kwargs)
-    llm = get_llm_provider(llm_provider_name, **llm_kwargs)
+    ocr = get_ocr_provider(ocr_provider_name, settings)
+    llm = get_llm_provider(llm_provider_name, settings)
 
     graph = ChequeReaderGraph(ocr_provider=ocr, llm_provider=llm)
 

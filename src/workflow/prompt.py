@@ -72,6 +72,7 @@ def build_dynamic_schema(requested_keys: list[str]) -> dict:
     }
 
     properties = {}
+    
     for key in requested_keys:
         props = field_map[key].copy()
         if props["type"] != "object":
