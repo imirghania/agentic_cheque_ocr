@@ -25,6 +25,22 @@ def get_ocr_providers(server_url: str) -> list[str]:
         return []
 
 
+def get_status(server_url: str) -> dict | None:
+    try:
+        resp = httpx.get(f"{server_url}/api/v1/status", timeout=5.0)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
+def switch_ocr(server_url: str, provider: str) -> dict:
+    with httpx.Client(timeout=300.0) as client:
+        response = client.post(f"{server_url}/api/v1/ocr/switch/{provider}")
+        response.raise_for_status()
+        return response.json()
+
+
 def extract_cheque(
     server_url: str,
     image_bytes: bytes,
@@ -54,6 +70,9 @@ def main():
 
     st.title("🏦 Cheque OCR Extractor")
 
+    if "active_ocr" not in st.session_state:
+        st.session_state.active_ocr = None
+
     with st.sidebar:
         st.header("Configuration")
 
@@ -64,28 +83,45 @@ def main():
 
         health = check_health(server_url)
         if health:
+            st.session_state.active_ocr = health.get("ocr_provider", st.session_state.active_ocr)
             st.success(f"🟢 Connected — {health['ocr_provider']} / {health['llm_provider']}")
         else:
             st.error("🔴 Server unreachable")
             st.stop()
 
+        status = get_status(server_url)
+        if status:
+            device_icon = "🟢 GPU" if status["cuda_available"] else "⚪ CPU"
+            st.info(f"Device: {device_icon} ({status['device']})")
+            loaded = status.get("loaded_ocr_providers", [])
+            if len(loaded) > 1:
+                st.caption(f"Loaded providers: {', '.join(loaded)}")
+        else:
+            st.info("Device: Unknown")
+
         st.divider()
 
         ocr_providers = get_ocr_providers(server_url)
+        default_index = 0
+        if st.session_state.active_ocr and st.session_state.active_ocr in ocr_providers:
+            default_index = ocr_providers.index(st.session_state.active_ocr)
+
         selected_ocr = st.selectbox(
             "OCR Provider",
             options=ocr_providers,
-            index=0,
+            index=default_index,
         )
 
-        try:
-            resp = httpx.get(f"{server_url}/api/v1/status", timeout=5.0)
-            resp.raise_for_status()
-            status = resp.json()
-            device_icon = "🟢 GPU" if status["cuda_available"] else "⚪ CPU"
-            st.info(f"Device: {device_icon} ({status['device']})")
-        except Exception:
-            st.info("Device: Unknown")
+        if selected_ocr != st.session_state.active_ocr:
+            with st.spinner(f"Loading {selected_ocr}..."):
+                try:
+                    switch_ocr(server_url, selected_ocr)
+                    st.session_state.active_ocr = selected_ocr
+                    st.success(f"✅ {selected_ocr} loaded")
+                except httpx.HTTPStatusError as e:
+                    st.error(f"Failed to load provider: {e.response.text}")
+                except Exception as e:
+                    st.error(f"Failed to load provider: {e}")
 
     st.subheader("Upload Cheque Image")
     uploaded_file = st.file_uploader(
@@ -118,7 +154,7 @@ def main():
                     filename=uploaded_file.name,
                     prompt=prompt,
                     output_format=output_format,
-                    ocr_provider=selected_ocr,
+                    ocr_provider=st.session_state.active_ocr,
                 )
 
                 if result.get("error"):

@@ -1,11 +1,10 @@
 from __future__ import annotations
 
-import logging
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import pytesseract
+import pytesseract  #type: ignore
 import torch
 from PIL import Image
 from transformers import LayoutLMv3ForTokenClassification
@@ -30,7 +29,7 @@ class TesseractOcr(OcrProvider):
         self.config = config or "--psm 6"
         self.gpu = gpu
         logger.info("Initializing TesseractOCR: lang=%s, config=%s, gpu=%s",
-                     self.lang, self.config, self.gpu)
+                    self.lang, self.config, self.gpu)
 
         t0 = time.time()
         self._layout_model = LayoutLMv3ForTokenClassification.from_pretrained(
@@ -45,7 +44,7 @@ class TesseractOcr(OcrProvider):
     def from_settings(cls, settings: "Settings", **overrides) -> "TesseractOcr":
         gpu = overrides.pop("gpu", False)
         logger.debug("TesseractOcr.from_settings: lang=%s, gpu=%s",
-                     settings.tesseract_lang, gpu)
+                    settings.tesseract_lang, gpu)
         return cls(lang=settings.tesseract_lang, gpu=gpu, **overrides)
 
     def extract(self, image: Path | str) -> OcrResult:
@@ -89,7 +88,7 @@ class TesseractOcr(OcrProvider):
             avg_conf = sum(confs) / len(confs)
 
         logger.debug("TesseractOCR result: %d blocks, avg_confidence=%.1f%%",
-                     len(blocks), avg_conf or 0)
+                    len(blocks), avg_conf or 0)
         return OcrResult(text=full_text, confidence=avg_conf, blocks=blocks)
 
     def _reorder_blocks(self, blocks: list[dict]) -> list[dict]:

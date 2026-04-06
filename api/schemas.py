@@ -30,3 +30,10 @@ class StatusResponse(BaseModel):
     cuda_available: bool
     ocr_provider: str
     llm_provider: str
+    loaded_ocr_providers: list[str]
+
+
+class SwitchResponse(BaseModel):
+    provider: str
+    device: str
+    loaded: bool

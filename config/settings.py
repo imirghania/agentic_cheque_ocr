@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     ocr_provider: str = "easyocr"
     use_gpu: bool = False
     tesseract_lang: str = "eng"
+    glm_ocr_model: str = "zai-org/GLM-OCR"
 
     llm_provider: str = "openai"
     openai_api_key: str | None = None

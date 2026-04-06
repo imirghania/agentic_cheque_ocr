@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from src.ocr.base import OcrProvider
 from src.ocr.tesseract import TesseractOcr  # noqa: F401
 from src.ocr.easyocr import EasyOcr  # noqa: F401
+from src.ocr.glm_ocr import GlmOcr  # noqa: F401
 
 if TYPE_CHECKING:
     from config.settings import Settings

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import logging
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import easyocr  #type: ignore
-import torch    #type: ignore
-from transformers import LayoutLMv3ForTokenClassification   #type: ignore
+import torch  #type: ignore
+from transformers import LayoutLMv3ForTokenClassification  #type: ignore
 
 from logger import logger
 from src.ocr.base import OcrProvider, OcrResult
@@ -58,7 +57,7 @@ class EasyOcr(OcrProvider):
         t0 = time.time()
         results = self._reader.readtext(image_path)
         logger.debug("EasyOCR readtext completed in %.2fs, found %d text regions",
-                     time.time() - t0, len(results))
+                    time.time() - t0, len(results))
 
         blocks: list[dict] = []
         for bbox, text, conf in results:
@@ -79,7 +78,7 @@ class EasyOcr(OcrProvider):
             avg_conf = sum(b["conf"] for b in blocks) / len(blocks)
 
         logger.debug("EasyOCR result: %d blocks, avg_confidence=%.1f%%",
-                     len(blocks), avg_conf or 0)
+                    len(blocks), avg_conf or 0)
         return OcrResult(text=full_text, confidence=avg_conf, blocks=blocks)
 
     def _reorder_blocks(self, blocks: list[dict]) -> list[dict]:

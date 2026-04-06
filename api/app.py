@@ -14,6 +14,7 @@ from api.schemas import (
     HealthResponse,
     ProvidersResponse,
     StatusResponse,
+    SwitchResponse,
 )
 
 from api.utils import format_markdown
@@ -31,7 +32,8 @@ async def lifespan(app: FastAPI):
                 settings.ocr_provider, settings.llm_provider)
     ocr = get_ocr_provider(settings.ocr_provider, settings)
     llm = get_llm_provider(settings.llm_provider, settings)
-    app.state.ocr = ocr
+    app.state.ocr_providers = {settings.ocr_provider: ocr}
+    app.state.active_ocr = settings.ocr_provider
     app.state.llm = llm
     app.state.settings = settings
     logger.info("Models loaded successfully")
@@ -50,12 +52,20 @@ app.add_middleware(
 )
 
 
+def _get_or_load_ocr(name: str):
+    if name not in app.state.ocr_providers:
+        logger.info("Lazy-loading OCR provider: %s", name)
+        app.state.ocr_providers[name] = get_ocr_provider(name, app.state.settings)
+    app.state.active_ocr = name
+    return app.state.ocr_providers[name]
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health():
     return HealthResponse(
         status="ok",
-        models_loaded=hasattr(app.state, "ocr") and hasattr(app.state, "llm"),
-        ocr_provider=app.state.settings.ocr_provider,
+        models_loaded=hasattr(app.state, "ocr_providers") and hasattr(app.state, "llm"),
+        ocr_provider=app.state.active_ocr,
         llm_provider=app.state.settings.llm_provider,
     )
 
@@ -76,8 +86,24 @@ async def get_status():
     return StatusResponse(
         device="cuda" if cuda else "cpu",
         cuda_available=cuda,
-        ocr_provider=app.state.settings.ocr_provider,
+        ocr_provider=app.state.active_ocr,
         llm_provider=app.state.settings.llm_provider,
+        loaded_ocr_providers=list(app.state.ocr_providers.keys()),
+    )
+
+
+@app.post("/api/v1/ocr/switch/{provider}", response_model=SwitchResponse)
+async def switch_cr(provider: str):
+    available = list_ocr_providers()
+    if provider not in available:
+        raise HTTPException(status_code=400, detail=f"Unknown OCR provider: {provider}. Available: {available}")
+    logger.info("Switching OCR provider: %s", provider)
+    ocr = _get_or_load_ocr(provider)
+    cuda = torch.cuda.is_available()
+    return SwitchResponse(
+        provider=provider,
+        device="cuda" if cuda else "cpu",
+        loaded=True,
     )
 
 
@@ -88,11 +114,11 @@ async def extract_cheque(
     output_format: str = Form(default="json"),
     ocr_provider: str | None = Form(default=None),
 ):
-    target_ocr = ocr_provider or app.state.settings.ocr_provider
+    target_ocr = ocr_provider or app.state.active_ocr
     logger.info("Extract request: filename=%s, ocr=%s",
                 image.filename, target_ocr)
 
-    ocr = app.state.ocr
+    ocr = _get_or_load_ocr(target_ocr)
     llm = app.state.llm
 
     content = await image.read()
