@@ -23,3 +23,10 @@ class FieldsResponse(BaseModel):
 
 class ProvidersResponse(BaseModel):
     ocr_providers: list[str]
+
+
+class StatusResponse(BaseModel):
+    device: str
+    cuda_available: bool
+    ocr_provider: str
+    llm_provider: str

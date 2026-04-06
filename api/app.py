@@ -13,6 +13,7 @@ from api.schemas import (
     FieldsResponse,
     HealthResponse,
     ProvidersResponse,
+    StatusResponse,
 )
 
 from api.utils import format_markdown
@@ -69,23 +70,29 @@ async def available_ocr_providers():
     return ProvidersResponse(ocr_providers=list_ocr_providers())
 
 
+@app.get("/api/v1/status", response_model=StatusResponse)
+async def get_status():
+    cuda = torch.cuda.is_available()
+    return StatusResponse(
+        device="cuda" if cuda else "cpu",
+        cuda_available=cuda,
+        ocr_provider=app.state.settings.ocr_provider,
+        llm_provider=app.state.settings.llm_provider,
+    )
+
+
 @app.post("/api/v1/cheque/extract", response_model=ExtractResponse)
 async def extract_cheque(
     image: UploadFile,
     prompt: str = Form(default="Extract all available fields from this cheque."),
     output_format: str = Form(default="json"),
     ocr_provider: str | None = Form(default=None),
-    use_gpu: bool = Form(default=True),
 ):
     target_ocr = ocr_provider or app.state.settings.ocr_provider
-    logger.info("Extract request: filename=%s, ocr=%s, gpu=%s",
-                image.filename, target_ocr, use_gpu)
+    logger.info("Extract request: filename=%s, ocr=%s",
+                image.filename, target_ocr)
 
-    if use_gpu and not torch.cuda.is_available():
-        logger.debug("GPU requested but not available, falling back to CPU")
-        use_gpu = False
-
-    ocr = get_ocr_provider(target_ocr, app.state.settings, gpu=use_gpu)
+    ocr = app.state.ocr
     llm = app.state.llm
 
     content = await image.read()

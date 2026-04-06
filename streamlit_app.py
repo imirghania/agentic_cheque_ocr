@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
+
+import os
 
 import httpx
 import streamlit as st
@@ -32,7 +32,6 @@ def extract_cheque(
     prompt: str,
     output_format: str,
     ocr_provider: str,
-    use_gpu: bool,
 ) -> dict:
     with httpx.Client(timeout=120.0) as client:
         files = {"image": (filename, image_bytes, "image/jpeg")}
@@ -40,7 +39,6 @@ def extract_cheque(
             "prompt": prompt,
             "output_format": output_format,
             "ocr_provider": ocr_provider,
-            "use_gpu": use_gpu,
         }
         response = client.post(
             f"{server_url}/api/v1/cheque/extract",
@@ -61,7 +59,7 @@ def main():
 
         server_url = st.text_input(
             "Server URL",
-            value="http://localhost:8000",
+            value=os.environ.get("SERVER_URL", "http://localhost:8000"),
         )
 
         health = check_health(server_url)
@@ -80,7 +78,14 @@ def main():
             index=0,
         )
 
-        use_gpu = st.checkbox("Use GPU (if available)", value=False)
+        try:
+            resp = httpx.get(f"{server_url}/api/v1/status", timeout=5.0)
+            resp.raise_for_status()
+            status = resp.json()
+            device_icon = "🟢 GPU" if status["cuda_available"] else "⚪ CPU"
+            st.info(f"Device: {device_icon} ({status['device']})")
+        except Exception:
+            st.info("Device: Unknown")
 
     st.subheader("Upload Cheque Image")
     uploaded_file = st.file_uploader(
@@ -114,7 +119,6 @@ def main():
                     prompt=prompt,
                     output_format=output_format,
                     ocr_provider=selected_ocr,
-                    use_gpu=use_gpu,
                 )
 
                 if result.get("error"):

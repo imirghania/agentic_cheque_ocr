@@ -198,6 +198,27 @@ from src.llm.my_llm import MyLlm  # noqa: F401
 
 Auto-registered as `my` (class name minus `"Provider"` and `"Llm"` suffixes).
 
+## Docker
+
+```bash
+cp .env.example .env
+# Edit .env with your API keys
+
+docker compose up -d
+```
+
+- API: `http://localhost:8000`
+- Streamlit UI: `http://localhost:8501`
+
+The Streamlit app waits for the API to be healthy before starting. Logs are persisted in `./logs/`.
+
+```bash
+docker compose down          # stop
+docker compose up -d --build # rebuild and restart
+docker compose logs -f api   # follow API logs
+docker compose logs -f streamlit
+```
+
 ## Logging
 
 Structured logging is enabled by default. Logs go to:
